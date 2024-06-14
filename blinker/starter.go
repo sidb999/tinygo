@@ -3,19 +3,18 @@ package blinker
 import (
 	"context"
 	"sync"
-	"time"
 )
 
 type Starter interface {
 	Go(wg *sync.WaitGroup)
 	Blinkers([]Blinker) error
-	Delay(time.Duration) error
+	// Delay(time.Duration) error
 	// Ctx(context.Context) error
 }
 type FlawlessStarter struct {
 	blinkers []Blinker
-	delay    time.Duration
-	ctx      context.Context
+	// delay    time.Duration
+	ctx context.Context
 }
 
 func (f *FlawlessStarter) Blinkers(b []Blinker) (err error) {
@@ -23,10 +22,10 @@ func (f *FlawlessStarter) Blinkers(b []Blinker) (err error) {
 	return
 }
 
-func (f *FlawlessStarter) Delay(d time.Duration) (err error) {
-	f.delay = d
-	return
-}
+// func (f *FlawlessStarter) Delay(d time.Duration) (err error) {
+// 	f.delay = d
+// 	return
+// }
 
 // func (f *FlawlessStarter) Ctx(c context.Context) (err error) {
 // 	f.ctx = c
@@ -38,6 +37,8 @@ func (f *FlawlessStarter) Go(wg *sync.WaitGroup) {
 		wg.Add(1)
 		// blinker.Run(f.ctx, wg)
 		blinker.Run(wg)
+		// FIXME: time.sleep will lock thread forever
+		// time.Sleep(400 * time.Millisecond)
 	}
 }
 
