@@ -1,44 +1,73 @@
 package main
 
 import (
+	"fmt"
 	"machine"
 	"sync"
+	"time"
 
-	"git.o0.tel/sidc/unoblink/blinker"
+	"git.o0.tel/sidc/unoblink/devices"
+	"git.o0.tel/sidc/unoblink/view"
 )
 
-var wg sync.WaitGroup
+var state view.StateStage
 
 func main() {
-	println("tickers")
-	tickers := blinker.NewTickers()
-	println("pwm")
-	pwm1 := machine.TCC0
-	err := pwm1.Configure(machine.PWMConfig{})
+	var mainWG sync.WaitGroup
+	errChan := make(chan error)
+	terminateChan := make(chan bool)
+	terminate := false
+	pinChange := time.NewTicker(5 * time.Millisecond)
+	printTick := time.NewTicker(250 * time.Millisecond)
+	parallelRunDelay := time.NewTicker(200 * time.Millisecond)
+	defer pinChange.Stop()
+	defer printTick.Stop()
+	defer parallelRunDelay.Stop()
+
+	led1, err := devices.NewLED(machine.D1, machine.TCC0) // TCC0 channel 0
 	if err != nil {
-		println(err.Error())
+		// TODO: process real typed error and exit if critical
+		errChan <- err
 	}
-	pwm2 := machine.TCC1
-	err = pwm2.Configure(machine.PWMConfig{})
+	led2, err := devices.NewLED(machine.D2, machine.TCC1) // TCC1 channel 0
 	if err != nil {
-		println(err.Error())
+		errChan <- err
 	}
-	// ctx, _ := context.WithCancel(context.Background())
-	blinkers := []*blinker.GracefulBlinker{
-		blinker.NewGracefulBlinker(pwm1, machine.D1, tickers),
-		blinker.NewGracefulBlinker(pwm2, machine.D2, tickers),
-		// blinker.NewGracefulBlinker(pwm2, machine.D3, tickers),
+
+	led3, err := devices.NewLED(machine.D3, machine.TCC1) // TCC1/0 channel 1/3
+	if err != nil {
+		errChan <- err
 	}
-	// println("blinkers created")
-	starter := blinker.NewFlawlessStarter(tickers)
-	// starter.Ctx(ctx)
-	starter.Blinkers(blinkers)
-	println("starter configured")
-	for {
-		println("GO!")
-		starter.Go(&wg)
-		println("waiting")
-		wg.Wait()
-		println("waited")
+	emitters := []*devices.LightEmitter{led1, led2, led3}
+
+	mainWG.Add(1)
+	go func() {
+		defer mainWG.Done()
+		println("Started termination listener")
+		die := <-terminateChan
+		if die {
+			terminate = true
+		}
+	}()
+
+	mainWG.Add(1)
+	go func() {
+		defer mainWG.Done()
+		for !terminate {
+			<-printTick.C
+			fmt.Println("\033[H\033[2J")
+			view.PrintStats(state, led1, led2, led3)
+		}
+	}()
+
+	for !terminate {
+		var internalWG sync.WaitGroup
+		for _, led := range emitters {
+			<-parallelRunDelay.C
+			internalWG.Add(1)
+			go led.Blink(&internalWG, pinChange)
+		}
+		internalWG.Wait()
 	}
+	mainWG.Wait()
 }
