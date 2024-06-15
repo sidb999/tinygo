@@ -17,9 +17,9 @@ func main() {
 	errChan := make(chan error)
 	terminateChan := make(chan bool)
 	terminate := false
-	pinChange := time.NewTicker(5 * time.Millisecond)
+	pinChange := time.NewTicker(10 * time.Millisecond)
 	printTick := time.NewTicker(250 * time.Millisecond)
-	parallelRunDelay := time.NewTicker(200 * time.Millisecond)
+	parallelRunDelay := time.NewTicker(250 * time.Millisecond)
 	defer pinChange.Stop()
 	defer printTick.Stop()
 	defer parallelRunDelay.Stop()
