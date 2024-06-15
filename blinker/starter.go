@@ -1,31 +1,28 @@
 package blinker
 
 import (
-	"context"
+	// "context"
 	"sync"
+	"time"
 )
 
-type Starter interface {
-	Go(wg *sync.WaitGroup)
-	Blinkers([]Blinker) error
-	// Delay(time.Duration) error
-	// Ctx(context.Context) error
-}
+//	type Starter interface {
+//		Go(wg *sync.WaitGroup)
+//		Blinkers([]*GracefulBlinker) error
+//		// Delay(time.Duration) error
+//		// Ctx(context.Context) error
+//	}
 type FlawlessStarter struct {
-	blinkers []Blinker
+	blinkers []*GracefulBlinker
 	// delay    time.Duration
-	ctx context.Context
+	tickers *Tickers
+	// ctx     context.Context
 }
 
-func (f *FlawlessStarter) Blinkers(b []Blinker) (err error) {
+func (f *FlawlessStarter) Blinkers(b []*GracefulBlinker) (err error) {
 	f.blinkers = b
 	return
 }
-
-// func (f *FlawlessStarter) Delay(d time.Duration) (err error) {
-// 	f.delay = d
-// 	return
-// }
 
 // func (f *FlawlessStarter) Ctx(c context.Context) (err error) {
 // 	f.ctx = c
@@ -33,15 +30,15 @@ func (f *FlawlessStarter) Blinkers(b []Blinker) (err error) {
 // }
 
 func (f *FlawlessStarter) Go(wg *sync.WaitGroup) {
+	startDelay := time.NewTicker(300 * time.Millisecond)
+	defer startDelay.Stop()
 	for _, blinker := range f.blinkers {
+		<-startDelay.C
 		wg.Add(1)
-		// blinker.Run(f.ctx, wg)
 		blinker.Run(wg)
-		// FIXME: time.sleep will lock thread forever
-		// time.Sleep(400 * time.Millisecond)
 	}
 }
 
-func NewFlawlessStarter() Starter {
+func NewFlawlessStarter(tickers *Tickers) *FlawlessStarter {
 	return &FlawlessStarter{}
 }

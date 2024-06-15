@@ -3,30 +3,35 @@ package blinker
 import (
 	"machine"
 	"sync"
+	"time"
 )
 
-type Blinker interface {
-	// Run(context.Context, *sync.WaitGroup)
-	Run(*sync.WaitGroup)
-}
+//	type Blinker interface {
+//		// Run(context.Context, *sync.WaitGroup)
+//		Run(*sync.WaitGroup)
+//	}
 type GracefulBlinker struct {
-	pwm *LockedPWM
-	led machine.Pin
+	pwm     machine.TCC
+	led     machine.Pin
+	tickers *Tickers
 }
 
-func NewGracefulBlinker(pwm *LockedPWM, led machine.Pin) Blinker {
+func NewGracefulBlinker(pwm *machine.TCC, led machine.Pin, tickers *Tickers) *GracefulBlinker {
 	led.Configure(machine.PinConfig{
 		Mode: machine.PinOutput,
 	})
 	return &GracefulBlinker{
-		pwm: pwm,
-		led: led,
+		pwm:     *pwm,
+		led:     led,
+		tickers: tickers,
 	}
 }
 
 // func (g *GracefulBlinker) Run(ctx context.Context, wg *sync.WaitGroup) {
 func (g *GracefulBlinker) Run(wg *sync.WaitGroup) {
 	println("starting routine")
+	pinUpdInterval := time.NewTicker(50 * time.Millisecond)
+	defer pinUpdInterval.Stop()
 	ch, err := g.pwm.Channel(g.led)
 	if err != nil {
 		println(err.Error())
@@ -34,16 +39,13 @@ func (g *GracefulBlinker) Run(wg *sync.WaitGroup) {
 	}
 	go func(wg *sync.WaitGroup, ch uint8) {
 		defer wg.Done()
-		top := g.pwm.Top()
-		x := top
-		for {
-			g.pwm.Set(ch, x)
-			x = x - top/100
-			if x == 0 {
-				x = top
-			}
-			// FIXME: time.sleep will lock thread forever
-			// time.Sleep(25 * time.Millisecond)
+		for i := 0; i < 65000; i += 650 {
+			<-pinUpdInterval.C
+			g.pwm.Set(ch, uint32(i))
+		}
+		for i := 65000; i > 0; i -= 650 {
+			<-pinUpdInterval.C
+			g.pwm.Set(ch, uint32(i))
 		}
 	}(wg, ch)
 }
