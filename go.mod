@@ -1,3 +1,3 @@
-module git.o0.tel/sidc/unoblink
+module git.o0.tel/sidc/tinygo
 
-go 1.22.3
+go 1.22.4
