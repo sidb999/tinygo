@@ -4,17 +4,11 @@ import (
 	"fmt"
 	"machine"
 
-	"git.o0.tel/sidc/unoblink/devices"
+	"git.o0.tel/sidc/unoblink/types"
 )
 
-type StateStage int8
-
-func (s StateStage) String() string {
-	return [...]string{"Low pins", "High pins"}[s]
-}
-
 const (
-	LowP StateStage = iota
+	LowP types.StateStage = iota
 	HighP
 )
 const ADCName = "LED"
@@ -29,8 +23,16 @@ func GetVoltage(led machine.ADC) string {
 	return fmt.Sprintf("%.2f", float32(led.Get())*3.3/65536)
 }
 
-func PrintStats(stage StateStage, leds ...*devices.LightEmitter) {
-	out := "\n" + stage.String()
+//	func PrintStats(stage StateStage, leds ...*devices.LightEmitter) {
+//		out := "\n" + stage.String()
+//		for n, led := range leds {
+//			out += "\n\t" + L(n) + ": " + GetVoltage(led.ADC)
+//		}
+//		out += "\n"
+//		fmt.Println(out)
+//	}
+func PrintStats(leds types.TrinityLEDs) {
+	out := "\n"
 	for n, led := range leds {
 		out += "\n\t" + L(n) + ": " + GetVoltage(led.ADC)
 	}

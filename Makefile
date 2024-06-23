@@ -5,8 +5,8 @@ build:
 	tinygo build -serial=usb -target=xiao -scheduler=tasks -o ./$(in).build.bin ./$(in).go
 
 flash:
-	udisksctl mount -b /dev/sda
-	tinygo flash -monitor -serial=usb -target=xiao -scheduler=tasks -timeout 1s -print-stacks main.go
+	sleep 2; udisksctl mount -b /dev/sda
+	tinygo flash -monitor -serial=usb -target=xiao -scheduler=tasks -timeout 1s  main.go
 
 buildtrace:
 	tinygo build -target=arduino -scheduler=coroutines -o ./$(in).build.bin ./$(in).go

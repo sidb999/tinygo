@@ -19,11 +19,11 @@ type LightEmitter struct {
 	Ch  uint8
 }
 
-func (l *LightEmitter) Set(emitLvl int) {
+func (l LightEmitter) Set(emitLvl int) {
 	l.TCC.Set(l.Ch, uint32(emitLvl))
 }
 
-func (l *LightEmitter) Blink(wg *sync.WaitGroup, pinChange *time.Ticker) {
+func (l LightEmitter) Blink(wg *sync.WaitGroup, pinChange *time.Ticker) {
 	defer wg.Done()
 	for i := 0; i < 65000; i += 650 {
 		<-pinChange.C
