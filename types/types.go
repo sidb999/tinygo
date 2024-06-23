@@ -4,7 +4,7 @@ import "git.o0.tel/sidc/unoblink/devices"
 
 type (
 	TrinityChans [3]<-chan int
-	TrinityLEDs  [3]*devices.LightEmitter
+	TrinityLEDs  [4]*devices.LightEmitter
 	StateStage   int8
 )
 
