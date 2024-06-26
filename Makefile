@@ -6,7 +6,7 @@ build:
 
 flash:
 	sleep 2; udisksctl mount -b /dev/sda
-	tinygo flash -monitor -serial=usb -target=xiao -scheduler=tasks -timeout 1s  ./cmd/asyncblinker/main.go
+	tinygo flash  -monitor -serial=usb -target=xiao -scheduler=tasks -timeout 1s  ./cmd/asyncblinker/main.go
 
 buildtrace:
 	tinygo build -target=arduino -scheduler=coroutines -o ./$(in).build.bin ./$(in).go

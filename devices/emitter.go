@@ -1,6 +1,8 @@
 package devices
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"machine"
 	"sync"
@@ -10,12 +12,14 @@ import (
 )
 
 const (
-	DefaultADCReference  = 3300
+	DefaultADCReference  = 3050
+	DefaultADCResolution = 12
+	DefaultADCSamples    = 32
 	DefaultADCSampleTime = 40 // use the longest acquisition time
-	DefaultADCSamples    = 4
-	maxVoltage           = 25000
-	voltageStep          = 1250
-	startDelay           = 250 * time.Millisecond
+	// maxVoltage           = 25000
+	maxVoltage  = 65535
+	voltageStep = 3275
+	startDelay  = 250 * time.Millisecond
 )
 
 type LightEmitter struct {
@@ -40,8 +44,9 @@ func NewLED(p machine.Pin, tcc *machine.TCC) (*LightEmitter, error) {
 	emitter.ADC = machine.ADC{Pin: emitter.Pin}
 	emitter.ADC.Configure(machine.ADCConfig{
 		Reference:  DefaultADCReference,
-		SampleTime: DefaultADCSampleTime,
+		Resolution: DefaultADCResolution,
 		Samples:    DefaultADCSamples,
+		SampleTime: DefaultADCSampleTime,
 	})
 	emitter.TCC = tcc
 	err = emitter.TCC.Configure(machine.PWMConfig{})
@@ -57,47 +62,72 @@ func NewLED(p machine.Pin, tcc *machine.TCC) (*LightEmitter, error) {
 
 type LEDArray [4]*LightEmitter
 
-func (leds LEDArray) Blink(rcChan chan *types.PinVolt, terminate *bool) {
+func (leds LEDArray) Blink(rcChan chan *types.PinIntensity, ctx context.Context) {
 	var regulatorWG sync.WaitGroup
 	var receiverWG sync.WaitGroup
 
-	vRegulator := func(wg *sync.WaitGroup, ledNumber uint8, v chan<- *types.PinVolt) {
+	vRegulator := func(wg *sync.WaitGroup, ledNumber uint8, v chan<- *types.PinIntensity) {
 		defer wg.Done()
-		defer fmt.Printf("vRegulator%d ends!\n", ledNumber)
+		defer fmt.Printf("\nvRegulator%d ends!\n", ledNumber)
 		pinChange := time.NewTicker(30 * time.Millisecond)
 		defer pinChange.Stop()
-		change := func(ledNumber uint8, volts uint32) {
+		change := func(ledNumber uint8, volts uint32, ctx context.Context) error {
 			<-pinChange.C
-			v <- &types.PinVolt{Pin: ledNumber, Voltage: volts}
+			select {
+			case <-ctx.Done():
+				var err error
+				err = ctx.Err()
+				if err == context.DeadlineExceeded {
+					err = errors.New("deadline exceeded!")
+				}
+				if err == context.Canceled {
+					err = errors.New("canceled!")
+				}
+				fmt.Println(err.Error())
+				return err
+			default:
+				v <- &types.PinIntensity{Pin: ledNumber, Voltage: volts}
+				return nil
+			}
 		}
-		for i := 0; i < 20; i++ {
-			// for {
+		// for i := 0; i < 10; i++ {
+		for {
 			for volts := uint32(0); volts < maxVoltage; volts += voltageStep {
-				change(ledNumber, volts)
+				err := change(ledNumber, volts, ctx)
+				if err != nil {
+					return
+				}
 			}
 			for volts := uint32(maxVoltage); volts > voltageStep; volts -= voltageStep {
-				change(ledNumber, volts)
+				err := change(ledNumber, volts, ctx)
+				if err != nil {
+					return
+				}
 			}
 			for volts := uint32(0); volts < maxVoltage-uint32(maxVoltage/5); volts += voltageStep {
-				change(ledNumber, 0)
+				err := change(ledNumber, 0, ctx)
+				if err != nil {
+					return
+				}
 			}
 		}
-		change(ledNumber, 0)
 	}
-	vReceiver := func(wg *sync.WaitGroup, rcChan <-chan *types.PinVolt, terminate *bool, leds *LEDArray) {
+	vReceiver := func(wg *sync.WaitGroup, rcChan <-chan *types.PinIntensity, ctx context.Context, leds *LEDArray) {
 		defer wg.Done()
-		defer fmt.Println("vReceiver ends!")
+		defer fmt.Println("\nvReceiver ends!")
 		for volts := range rcChan {
-			if *terminate {
-				break
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				leds[volts.Pin].Set(volts.Voltage)
 			}
-			leds[volts.Pin].Set(volts.Voltage)
 		}
 	}
 
 	fmt.Println("starting vReceiver...")
 	receiverWG.Add(1)
-	go vReceiver(&receiverWG, rcChan, terminate, &leds)
+	go vReceiver(&receiverWG, rcChan, ctx, &leds)
 	time.Sleep(startDelay)
 
 	for i := uint8(0); i < uint8(len(leds)); i++ {
@@ -111,4 +141,12 @@ func (leds LEDArray) Blink(rcChan chan *types.PinVolt, terminate *bool) {
 	close(rcChan)
 	receiverWG.Wait()
 	fmt.Println("receivers waited: OK!")
+}
+
+func (leds LEDArray) GetADCs() map[uint8]machine.ADC {
+	adcMap := make(map[uint8]machine.ADC)
+	for _, led := range leds {
+		adcMap[uint8(led.Pin)] = led.ADC
+	}
+	return adcMap
 }

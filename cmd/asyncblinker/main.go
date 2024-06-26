@@ -1,39 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"machine"
-	"runtime"
 	"sync"
 	"time"
 
 	"git.o0.tel/sidc/tinygo/devices"
 	"git.o0.tel/sidc/tinygo/types"
-	"git.o0.tel/sidc/tinygo/view"
 )
-
-var state types.StateStage
-
-func termListener(wg *sync.WaitGroup, terminateChan <-chan bool, terminate *bool) {
-	defer wg.Done()
-	println("Started termination listener")
-	die := <-terminateChan
-	if die {
-		*terminate = true
-	}
-}
-
-func printStats(wg *sync.WaitGroup, terminate *bool, leds devices.LEDArray) {
-	printTick := time.NewTicker(50 * time.Millisecond)
-	serialPrinter := view.NewSerialPrinter()
-	defer printTick.Stop()
-	defer wg.Done()
-	for !*terminate {
-		<-printTick.C
-		fmt.Println("\033[H\033[2J")
-		serialPrinter.PrintStats(leds)
-	}
-}
 
 func emitters() (devices.LEDArray, error) {
 	led1, err := devices.NewLED(machine.D1, machine.TCC0)
@@ -44,25 +20,21 @@ func emitters() (devices.LEDArray, error) {
 }
 
 func main() {
-	runtime.GOMAXPROCS(10)
+	time.Sleep(5 * time.Second)
+	fmt.Println("calc created")
 	var mainWG sync.WaitGroup
-	terminateChan := make(chan bool)
-	rcChan := make(chan *types.PinVolt, 3)
-	terminate := false
+	ctx, cancel := context.WithCancel(context.Background())
+	rcChan := make(chan *types.PinIntensity, 4)
 
 	emitters, err := emitters()
 	if err != nil {
 		panic(err)
 	}
+	vc := devices.NewVoltageCalculator(ctx, 20, emitters.GetADCs())
+	vc.Measure(&mainWG)
 
-	mainWG.Add(1)
-	go termListener(&mainWG, terminateChan, &terminate)
-
-	mainWG.Add(1)
-	go printStats(&mainWG, &terminate, emitters)
-
-	emitters.Blink(rcChan, &terminate)
-	terminateChan <- true
+	emitters.Blink(rcChan, ctx)
+	cancel()
 
 	fmt.Println("waiting main wg...")
 	mainWG.Wait()
